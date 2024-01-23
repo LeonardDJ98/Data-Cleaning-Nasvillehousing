@@ -1,0 +1,216 @@
+
+---------------------------Data cleaning Protfolio Project , NashvilleHousing----------------------------------------------------
+
+
+
+
+
+
+SELECT TOP (1000) [UniqueID]
+      ,[ParcelID]
+      ,[LandUse]
+      ,[PropertyAddress]
+      ,[SaleDate]
+      ,[SalePrice]
+      ,[LegalReference]
+      ,[SoldAsVacant]
+      ,[OwnerName]
+      ,[OwnerAddress]
+      ,[Acreage]
+      ,[TaxDistrict]
+      ,[LandValue]
+      ,[BuildingValue]
+      ,[TotalValue]
+      ,[YearBuilt]
+      ,[Bedrooms]
+      ,[FullBath]
+      ,[HalfBath]
+  FROM [PortfolioProject].[dbo].[NashvilleHousing]
+
+ -- Cleaning Data in SQL Queries 
+
+ select * 
+ from nashvillehousing;
+ 
+
+ 
+ --------------------------------------------------------------------------------------------------------------------------------
+ 
+ --Standardize The Date Format
+
+ select saledate , convert(date,saledate)
+ from nashvillehousing;
+
+ --Populate Property address data 
+ --Use the ISNULL function to replace with address if the values is null
+
+ select *
+ from nashvillehousing
+where propertyaddress is null;
+
+select * 
+ from nashvillehousing
+ order by parcelid;
+
+ select a.parcelid,a.propertyaddress,b.parcelid,b.propertyaddress, isnull(a.propertyaddress,b.propertyaddress)
+ from nashvillehousing a
+ join nashvillehousing b 
+	on a.parcelid =b.parcelid
+	and a.uniqueid <>b.uniqueid
+	--where a.propertyaddress is null;
+
+update a
+set propertyaddress = isnull(a.propertyaddress,b.propertyaddress)
+from nashvillehousing a
+ join nashvillehousing b 
+	on a.parcelid =b.parcelid
+	and a.uniqueid <>b.uniqueid
+where a.propertyaddress is null;
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--Breaking out Address in to Individual Columns(Address, City, State) using substring and a character index (charindex) functions ----------
+
+
+select propertyaddress
+ from nashvillehousing      --currently showing city, state and address all in one column
+ order by parcelid;         -- we want to clean that up to so they have thier own column 
+
+
+ select propertyaddress
+ from nashvillehousing      
+ order by parcelid; 
+
+ select 
+ SUBSTRING(propertyaddress,1,CHARINDEX(',',propertyaddress)) as address
+ SUBSTRING(propertyaddress,CHARINDEX(',',propertyaddress)+1, len(propertyaddress)) as city
+ from nashvillehousing ;
+
+
+ 
+ Alter table NashvilleHousing                       --add the new PropertySplitAddress Table 
+ add PropertySplitAddress nvarchar(255) ;
+
+ update Nashvillehousing
+ set PropertySplitAddress =  SUBSTRING(propertyaddress,1,CHARINDEX(',',propertyaddress) -1)  --add the results 
+
+ Alter table Nashvillehousing
+ add PropertySplitcity nvarchar(255);   -- adds the city table 
+
+ update Nashvillehousing
+ set PropertySplitCity = SUBSTRING(propertyaddress,CHARINDEX(',',propertyaddress)+1, len(propertyaddress))   --sets city to sub string 
+
+
+
+ select * 
+ from nashvillehousing;  -- will display everything including the new tables PropertSplitAddress and PropertSplitCity
+
+-- Here is a faster and easier way to to the above 
+
+ select owneraddress      -- currently shows the address city and the state , we want to seperate into different columns 
+ from nashvillehousing;
+
+
+ select
+ parsename(replace (owneraddress,',','.'),1)
+,parsename(replace (owneraddress,',','.'),2)           -- seperates everything for us by using the parsname command and locating the periods 
+,parsename(replace (owneraddress,',','.'),3)           --state, city , address  
+ from nashvillehousing 
+
+  select
+ parsename(replace (owneraddress,',','.'),3)
+,parsename(replace (owneraddress,',','.'),2)           -- seperates everything for us by using the parsname command and locating the periods 
+,parsename(replace (owneraddress,',','.'),1)            --address, city, state       
+ from nashvillehousing 
+
+
+
+
+ Alter table NashvilleHousing                       --add the new OwnerSplitAddress Table 
+ add OwnerSplitAddress nvarchar(255) ;
+
+ update Nashvillehousing
+ set OwnerSplitAddress = parsename(replace (owneraddress,',','.'),3)  --add the results 
+
+ Alter table Nashvillehousing
+ add OwnerSplitCity nvarchar(255);   -- adds the ownersplitcity table 
+
+ update Nashvillehousing
+ set OwnerSplitCity = parsename(replace (owneraddress,',','.'),2)  
+
+
+ Alter table Nashvillehousing
+ add OwnerSplitState nvarchar(255);   -- adds the ownersplitstate table 
+
+ update Nashvillehousing
+ set OwnerSplitCity = parsename(replace (owneraddress,',','.'),1)  
+
+
+ select * from nashvillehousing;   -- it should now display the new columns OwnerSplitAddress, OwnerSplitcity,OwnerSplitstate 
+
+
+
+ --------------------------------------------------------------------------------------------------------------------------------------
+
+ -- Change Y and N to Yes and No in "Sold as Vacant" field 
+
+ select distinct (soldasvacant),count(soldasvacant)
+ from nashvillehousing 
+ group by soldasvacant
+ order by 2;
+
+
+ Select SoldasVacant
+ ,case when soldasvacant = '1' then 'Yes'  --we want it to say either yes or no in the Soldas vacant column 0 = no 1=yes 
+  when soldasvacant = '0' then 'No'
+  else soldasvacant
+  end
+ from nashvillehousing 
+
+
+ Select *
+ from nashvillehousing;
+
+ alter table nashvillehousing                 --the datatype was prevoiusly an int , had to changes it to an nvarchar
+ alter column soldasvacant nvarchar(255);
+
+ update nashvillehousing
+ set soldasvacant= case when soldasvacant = '1' then 'Yes'   -- updated to not it show the count of  "yes" and NO in the data for sold as vacant 
+  when soldasvacant = '0' then 'No'
+  else soldasvacant
+  end
+
+
+  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  -- Remove the Duplicates (pacril ID, sale date ,legal refrence etc) 
+
+  with rownumcte as (
+  select *, 
+   row_number() over(
+   Partition by parcelid,
+				propertyaddress,
+				saleprice,
+				saledate,
+				legalreference
+				order by 
+					uniqueid
+					)row_num
+  from nashvillehousing
+  --order by parcelid
+  )
+ select*
+  from rownumcte
+  where row_num > 1
+ order by propertyaddress;
+
+
+ ----------------------------------------------------------------------------------------------------------------------------
+
+ -- delete unused columns (OWNERADDRESS, tax district , property address,saledate)
+
+ select * 
+ from nashvillehousing ;
+
+ alter table nashvillehousing 
+ drop column saledate;
